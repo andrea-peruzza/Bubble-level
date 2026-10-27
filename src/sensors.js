@@ -21,10 +21,16 @@ export class SensorManager {
   }
 
   /**
-   * Checks whether explicit permission request is required (iOS 13+)
+   * Checks whether explicit permission request is required (iOS 13+ Safari/WebKit)
    */
   requiresExplicitPermission() {
+    const isIOS =
+      typeof navigator !== 'undefined' &&
+      (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
     return (
+      isIOS &&
       typeof window.DeviceOrientationEvent !== 'undefined' &&
       typeof window.DeviceOrientationEvent.requestPermission === 'function'
     );

@@ -17,6 +17,7 @@ class BubbleLevelApp {
     this.wasLevel = false;
     this.lastVibrateTime = 0;
     this.wakeLock = null;
+    this.audioCtx = null;
 
     // DOM References
     this.dom = {
@@ -72,6 +73,15 @@ class BubbleLevelApp {
   }
 
   setupEventListeners() {
+    // Unlock AudioContext on first user interaction
+    const unlockAudio = () => {
+      this.initAudio();
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('click', unlockAudio);
+    };
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    window.addEventListener('click', unlockAudio, { passive: true });
+
     // Request iOS permissions on user click
     this.dom.requestPermissionBtn.addEventListener('click', async () => {
       const res = await this.sensorManager.requestPermission();
@@ -242,6 +252,35 @@ class BubbleLevelApp {
     this.dom.resetTareBtn.classList.toggle('hidden', !isCalibrated);
   }
 
+  initAudio() {
+    if (!this.audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+      const AudioClass = window.AudioContext || window.webkitAudioContext;
+      this.audioCtx = new AudioClass();
+    }
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+  }
+
+  playLevelBeep() {
+    try {
+      this.initAudio();
+      if (!this.audioCtx || this.audioCtx.state !== 'running') return;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, this.audioCtx.currentTime); // 880 Hz (A5 soft chime)
+      gain.gain.setValueAtTime(0.12, this.audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.12);
+      osc.start();
+      osc.stop(this.audioCtx.currentTime + 0.12);
+    } catch (e) {
+      // Audio not permitted or unavailable
+    }
+  }
+
   triggerHaptic(pattern) {
     if (!this.hapticsEnabled) return;
     const now = Date.now();
@@ -252,8 +291,12 @@ class BubbleLevelApp {
       try {
         navigator.vibrate(pattern);
       } catch (e) {
-        // Ignore browser vibration restrictions
+        // Fallback if vibration fails
+        this.playLevelBeep();
       }
+    } else {
+      // Fallback for iOS Safari (which lacks navigator.vibrate in WebKit)
+      this.playLevelBeep();
     }
   }
 
