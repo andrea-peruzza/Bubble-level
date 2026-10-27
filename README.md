@@ -13,6 +13,7 @@ A high-precision, mobile-first web application designed to measure surface incli
   - **Haptic:** Vibration pulse (`navigator.vibrate`) when reaching the level state.
   - **Screen Wake Lock:** Keeps the screen on during measurements (`navigator.wakeLock`).
 - **iOS Safari Support:** Built-in permission request flow for iOS 13+.
+- **Progressive Web App (PWA):** Fully installable on Android and iOS home screens. Works 100% offline via Service Worker caching, runs fullscreen like a native app, and includes an in-app "Install" button.
 - **Built-in Desktop Simulator:** Allows full testing on PC browsers by dragging the mouse across the target or using tilt sliders.
 
 ## 🚀 Running Locally

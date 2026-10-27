@@ -36,6 +36,7 @@ class BubbleLevelApp {
       levelStatusText: document.getElementById('levelStatusText'),
       hardwareStatus: document.getElementById('hardwareStatus'),
       calibrationBadge: document.getElementById('calibrationBadge'),
+      installPwaBtn: document.getElementById('installPwaBtn'),
       iosPermissionBanner: document.getElementById('iosPermissionBanner'),
       requestPermissionBtn: document.getElementById('requestPermissionBtn'),
       frozenBanner: document.getElementById('frozenBanner'),
@@ -68,6 +69,8 @@ class BubbleLevelApp {
     this.setupEventListeners();
     this.updateCalibrationBadge();
     this.initWakeLock();
+    this.setupPwaInstall();
+    this.registerServiceWorker();
 
     // iOS permissions check
     if (this.sensorManager.requiresExplicitPermission()) {
@@ -406,6 +409,54 @@ class BubbleLevelApp {
         console.warn('Wake Lock unavailable:', err);
       }
     }
+  }
+
+  registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('[PWA] Service Worker registered with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('[PWA] Service Worker registration failed:', err);
+          });
+      });
+    }
+  }
+
+  setupPwaInstall() {
+    let deferredPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent browser default mini-infobar
+      e.preventDefault();
+      deferredPrompt = e;
+
+      // Reveal custom install button
+      if (this.dom.installPwaBtn) {
+        this.dom.installPwaBtn.classList.remove('hidden');
+      }
+    });
+
+    if (this.dom.installPwaBtn) {
+      this.dom.installPwaBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          this.dom.installPwaBtn.classList.add('hidden');
+        }
+        deferredPrompt = null;
+      });
+    }
+
+    window.addEventListener('appinstalled', () => {
+      console.log('[PWA] Bubble Level installed successfully!');
+      if (this.dom.installPwaBtn) {
+        this.dom.installPwaBtn.classList.add('hidden');
+      }
+    });
   }
 }
 
