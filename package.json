@@ -1,0 +1,17 @@
+{
+  "name": "bubble-level",
+  "version": "1.0.0",
+  "description": "High-precision digital bubble level web app for smartphones",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/filter.test.js"
+  },
+  "keywords": [
+    "bubble-level",
+    "inclinometer",
+    "sensors",
+    "deviceorientation",
+    "pwa"
+  ],
+  "license": "PolyForm-Noncommercial-1.0.0"
+}
