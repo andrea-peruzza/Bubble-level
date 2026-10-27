@@ -1,0 +1,279 @@
+/**
+ * app.js
+ * Main coordinator for the Bubble Level application.
+ */
+
+import { SensorFilter } from './filter.js';
+import { SensorManager } from './sensors.js';
+
+// Configuration constants
+const LEVEL_THRESHOLD_DEG = 0.2; // Tolerance to be considered "Level"
+const MAX_SCALE_DEGREES = 6.0;   // Maximum tilt angle mapped to the edge of the circular target
+
+class BubbleLevelApp {
+  constructor() {
+    this.filter = new SensorFilter(0.22); // Balanced smoothing factor
+    this.hapticsEnabled = true;
+    this.wasLevel = false;
+    this.lastVibrateTime = 0;
+    this.wakeLock = null;
+
+    // DOM References
+    this.dom = {
+      appContainer: document.querySelector('.app-container'),
+      levelTarget: document.getElementById('levelTarget'),
+      bubble: document.getElementById('bubble'),
+      totalTiltDisplay: document.getElementById('totalTiltDisplay'),
+      gammaDisplay: document.getElementById('gammaDisplay'),
+      betaDisplay: document.getElementById('betaDisplay'),
+      levelStatusText: document.getElementById('levelStatusText'),
+      hardwareStatus: document.getElementById('hardwareStatus'),
+      calibrationBadge: document.getElementById('calibrationBadge'),
+      iosPermissionBanner: document.getElementById('iosPermissionBanner'),
+      requestPermissionBtn: document.getElementById('requestPermissionBtn'),
+      tareBtn: document.getElementById('tareBtn'),
+      resetTareBtn: document.getElementById('resetTareBtn'),
+      toggleHapticsBtn: document.getElementById('toggleHapticsBtn'),
+      simulationControls: document.getElementById('simulationControls'),
+      simGamma: document.getElementById('simGamma'),
+      simBeta: document.getElementById('simBeta')
+    };
+
+    // Latest calculated state for the render loop
+    this.currentData = {
+      beta: 0,
+      gamma: 0,
+      alpha: 0,
+      totalTilt: 0,
+      isSimulated: false,
+      hasHardware: false
+    };
+
+    this.init();
+  }
+
+  init() {
+    this.sensorManager = new SensorManager(this.onSensorUpdate.bind(this));
+
+    this.setupEventListeners();
+    this.updateCalibrationBadge();
+    this.initWakeLock();
+
+    // iOS permissions check
+    if (this.sensorManager.requiresExplicitPermission()) {
+      this.dom.iosPermissionBanner.classList.remove('hidden');
+      this.dom.hardwareStatus.textContent = 'Awaiting permission';
+    } else {
+      this.sensorManager.start();
+    }
+
+    // Start 60 FPS rendering loop
+    requestAnimationFrame(this.renderLoop.bind(this));
+  }
+
+  setupEventListeners() {
+    // Request iOS permissions on user click
+    this.dom.requestPermissionBtn.addEventListener('click', async () => {
+      const res = await this.sensorManager.requestPermission();
+      if (res.success) {
+        this.dom.iosPermissionBanner.classList.add('hidden');
+      } else {
+        alert('Unable to access sensors: ' + (res.error || 'Denied'));
+      }
+    });
+
+    // Tare / Zero calibration
+    this.dom.tareBtn.addEventListener('click', () => {
+      this.filter.calibrate();
+      this.updateCalibrationBadge();
+      this.triggerHaptic(60);
+    });
+
+    // Reset calibration
+    this.dom.resetTareBtn.addEventListener('click', () => {
+      this.filter.resetCalibration();
+      this.updateCalibrationBadge();
+      this.triggerHaptic(30);
+    });
+
+    // Toggle Vibration / Haptics
+    this.dom.toggleHapticsBtn.addEventListener('click', () => {
+      this.hapticsEnabled = !this.hapticsEnabled;
+      this.dom.toggleHapticsBtn.classList.toggle('active', this.hapticsEnabled);
+      if (this.hapticsEnabled) {
+        this.triggerHaptic(40);
+      }
+    });
+
+    // Interactive pointer drag on PC target
+    let isDragging = false;
+
+    const handlePointerMove = (e) => {
+      if (!isDragging) return;
+      const rect = this.dom.levelTarget.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      
+      const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY ?? (e.touches && e.touches[0].clientY);
+
+      const deltaX = clientX - centerX;
+      const deltaY = clientY - centerY;
+      const radius = rect.width / 2;
+
+      // Map pixels to degrees
+      const gammaDeg = (deltaX / radius) * MAX_SCALE_DEGREES;
+      const betaDeg = -(deltaY / radius) * MAX_SCALE_DEGREES;
+
+      this.sensorManager.setSimulatedAngles(betaDeg, gammaDeg);
+
+      // Update slider positions
+      if (this.dom.simGamma) this.dom.simGamma.value = gammaDeg.toFixed(1);
+      if (this.dom.simBeta) this.dom.simBeta.value = betaDeg.toFixed(1);
+    };
+
+    this.dom.levelTarget.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      handlePointerMove(e);
+    });
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    // Desktop simulation sliders
+    const onSliderChange = () => {
+      const g = parseFloat(this.dom.simGamma.value);
+      const b = parseFloat(this.dom.simBeta.value);
+      this.sensorManager.setSimulatedAngles(b, g);
+    };
+
+    this.dom.simGamma.addEventListener('input', onSliderChange);
+    this.dom.simBeta.addEventListener('input', onSliderChange);
+  }
+
+  onSensorUpdate({ rawBeta, rawGamma, rawAlpha, isSimulated, hasHardware }) {
+    // Apply low-pass filter and calibration offset
+    const filtered = this.filter.update(rawBeta, rawGamma, rawAlpha);
+
+    this.currentData = {
+      beta: filtered.beta,
+      gamma: filtered.gamma,
+      alpha: filtered.alpha,
+      totalTilt: filtered.totalTilt,
+      isSimulated,
+      hasHardware
+    };
+  }
+
+  renderLoop() {
+    this.updateUI();
+    requestAnimationFrame(this.renderLoop.bind(this));
+  }
+
+  updateUI() {
+    const { beta, gamma, totalTilt, isSimulated, hasHardware } = this.currentData;
+
+    // Update hardware status badge
+    if (isSimulated) {
+      this.dom.hardwareStatus.textContent = 'PC Simulator';
+      this.dom.hardwareStatus.className = 'badge badge-sim';
+      this.dom.simulationControls.classList.remove('hidden');
+    } else if (hasHardware) {
+      this.dom.hardwareStatus.textContent = 'Sensor Active';
+      this.dom.hardwareStatus.className = 'badge badge-active';
+      this.dom.simulationControls.classList.add('hidden');
+    }
+
+    // Update digital numeric display
+    this.dom.totalTiltDisplay.textContent = totalTilt.toFixed(1);
+    this.dom.gammaDisplay.textContent = (gamma >= 0 ? '+' : '') + gamma.toFixed(1) + '°';
+    this.dom.betaDisplay.textContent = (beta >= 0 ? '+' : '') + beta.toFixed(1) + '°';
+
+    // Calculate bubble position within the circular target
+    const targetRect = this.dom.levelTarget.getBoundingClientRect();
+    const targetRadius = targetRect.width / 2;
+    const bubbleRadius = this.dom.bubble.offsetWidth / 2 || 20;
+    const maxDisplacement = Math.max(0, targetRadius - bubbleRadius - 4);
+
+    // Physical air bubble mapping:
+    // Air bubble moves towards the highest elevated point:
+    // If gamma > 0 (tilted right), right side is higher -> bubble moves right (X > 0)
+    // If beta > 0 (tilted up), top side is higher -> bubble moves up (screen Y < 0)
+    const scale = maxDisplacement / MAX_SCALE_DEGREES;
+    let dx = gamma * scale;
+    let dy = -beta * scale;
+
+    // Circular constraint (clamp to maximum target radius)
+    const distance = Math.hypot(dx, dy);
+    if (distance > maxDisplacement && distance > 0) {
+      dx = (dx / distance) * maxDisplacement;
+      dy = (dy / distance) * maxDisplacement;
+    }
+
+    // Apply translation to bubble
+    this.dom.bubble.style.transform = `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`;
+
+    // Check if level condition is met
+    const isLevel = totalTilt <= LEVEL_THRESHOLD_DEG;
+
+    if (isLevel) {
+      this.dom.appContainer.classList.add('is-level');
+      this.dom.levelStatusText.textContent = 'PERFECTLY LEVEL';
+
+      // Haptic feedback (vibration upon entering level state)
+      if (!this.wasLevel) {
+        this.triggerHaptic([35, 30, 45]);
+        this.wasLevel = true;
+      }
+    } else {
+      this.dom.appContainer.classList.remove('is-level');
+      if (totalTilt <= 1.0) {
+        this.dom.levelStatusText.textContent = 'NEARLY LEVEL';
+      } else {
+        this.dom.levelStatusText.textContent = 'INCLINED';
+      }
+      this.wasLevel = false;
+    }
+  }
+
+  updateCalibrationBadge() {
+    const isCalibrated = this.filter.isCalibrated();
+    this.dom.calibrationBadge.classList.toggle('hidden', !isCalibrated);
+    this.dom.resetTareBtn.classList.toggle('hidden', !isCalibrated);
+  }
+
+  triggerHaptic(pattern) {
+    if (!this.hapticsEnabled) return;
+    const now = Date.now();
+    if (now - this.lastVibrateTime < 300) return; // Debounce to prevent constant buzzing
+    this.lastVibrateTime = now;
+
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {
+        // Ignore browser vibration restrictions
+      }
+    }
+  }
+
+  async initWakeLock() {
+    if ('wakeLock' in navigator) {
+      try {
+        this.wakeLock = await navigator.wakeLock.request('screen');
+        document.addEventListener('visibilitychange', async () => {
+          if (this.wakeLock !== null && document.visibilityState === 'visible') {
+            this.wakeLock = await navigator.wakeLock.request('screen');
+          }
+        });
+      } catch (err) {
+        console.warn('Wake Lock unavailable:', err);
+      }
+    }
+  }
+}
+
+// Initialize application on DOM load
+window.addEventListener('DOMContentLoaded', () => {
+  new BubbleLevelApp();
+});

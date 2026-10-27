@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Digital Bubble Level</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <circle cx="12" cy="12" r="4" fill="currentColor"></circle>
+            <line x1="12" y1="2" x2="12" y2="6"></line>
+            <line x1="12" y1="18" x2="12" y2="22"></line>
+            <line x1="2" y1="12" x2="6" y2="12"></line>
+            <line x1="18" y1="12" x2="22" y2="12"></line>
+          </svg>
+        </div>
+        <div>
+          <h1>Bubble Level</h1>
+          <span class="subtitle">Precision Inclinometer</span>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span id="calibrationBadge" class="badge badge-warning hidden">Calibrated</span>
+        <span id="hardwareStatus" class="badge badge-neutral">Initializing...</span>
+      </div>
+    </header>
+
+    <!-- iOS Permission Banner (shown only if required) -->
+    <div id="iosPermissionBanner" class="permission-banner hidden">
+      <div class="banner-content">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <span>iOS requires permission to access motion sensors.</span>
+      </div>
+      <button id="requestPermissionBtn" class="btn btn-primary">Enable Sensors</button>
+    </div>
+
+    <!-- Main Level Display -->
+    <main class="level-main">
+      <!-- Target circular display (Bull's Eye) -->
+      <div class="target-wrapper">
+        <div id="levelTarget" class="level-target" title="Drag here with mouse on PC to simulate tilt">
+          <!-- Concentric rings with degree markings -->
+          <div class="ring ring-5" data-deg="5°"></div>
+          <div class="ring ring-2" data-deg="2°"></div>
+          <div class="ring ring-1" data-deg="1°"></div>
+          <div class="ring ring-center"></div>
+
+          <!-- Crosshairs -->
+          <div class="crosshair crosshair-h"></div>
+          <div class="crosshair crosshair-v"></div>
+
+          <!-- The moving bubble -->
+          <div id="bubble" class="bubble">
+            <div class="bubble-inner"></div>
+            <div class="bubble-glare"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Digital Angle Readout -->
+      <div class="readout-panel">
+        <div class="main-readout">
+          <span id="totalTiltDisplay" class="total-tilt">0.0</span>
+          <span class="unit">°</span>
+        </div>
+        <div id="levelStatusText" class="level-status">PERFECTLY LEVEL</div>
+
+        <!-- Axis Breakdown -->
+        <div class="axis-details">
+          <div class="axis-item">
+            <span class="axis-label">X Axis (Roll)</span>
+            <span id="gammaDisplay" class="axis-val">0.0°</span>
+          </div>
+          <div class="axis-item">
+            <span class="axis-label">Y Axis (Pitch)</span>
+            <span id="betaDisplay" class="axis-val">0.0°</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Controls -->
+    <footer class="app-controls">
+      <div class="control-actions">
+        <button id="tareBtn" class="btn btn-action" title="Zero the level on the current surface">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M12 3v18"></path>
+          </svg>
+          <span>Tare / Zero</span>
+        </button>
+        <button id="resetTareBtn" class="btn btn-secondary hidden" title="Restore factory calibration">
+          <span>Reset</span>
+        </button>
+        <button id="toggleHapticsBtn" class="btn btn-icon active" title="Toggle Vibration">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M8 5v14M16 5v14M4 8v8M20 8v8"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Simulation notice for Desktop Testing -->
+      <div id="simulationControls" class="sim-panel hidden">
+        <div class="sim-header">
+          <span class="sim-tag">Desktop Test Mode</span>
+          <span class="sim-hint">Drag on target or use sliders</span>
+        </div>
+        <div class="sim-sliders">
+          <label>Roll (X): <input type="range" id="simGamma" min="-10" max="10" step="0.1" value="0"></label>
+          <label>Pitch (Y): <input type="range" id="simBeta" min="-10" max="10" step="0.1" value="0"></label>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
