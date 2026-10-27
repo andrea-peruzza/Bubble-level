@@ -530,3 +530,99 @@ html, body {
 .hidden {
   display: none !important;
 }
+
+/* Face-Down Frozen Banner & Unlock Button */
+.frozen-banner {
+  background: rgba(14, 165, 233, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.25);
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  animation: slideDown 0.3s ease;
+  z-index: 50;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.frozen-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.frozen-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-blue);
+  flex-shrink: 0;
+}
+
+.frozen-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  display: block;
+}
+
+.frozen-sub {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  display: block;
+}
+
+.btn-unlock {
+  background: var(--accent-blue);
+  color: #04101e;
+  font-weight: 700;
+  padding: 10px 14px;
+  font-size: 0.8rem;
+  border-radius: 10px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-unlock:active {
+  transform: scale(0.96);
+}
+
+.sim-check {
+  display: flex !important;
+  align-items: center !important;
+  flex-direction: row !important;
+  gap: 6px !important;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sim-check input {
+  width: auto !important;
+}
+
+.app-container.is-frozen .level-target {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.3), inset 0 0 20px rgba(56, 189, 248, 0.2);
+}
+

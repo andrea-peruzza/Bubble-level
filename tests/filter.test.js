@@ -43,4 +43,17 @@ res = filter.update(20, 20, 0);
 assert(res.beta > 10, 'Beta should return to uncalibrated measurement');
 console.log('✓ Reset calibration restores original values');
 
+// Test 5: Face-down tilt calculation
+const faceDownFilter = new SensorFilter(1.0);
+// When flat face-down on table, beta is 180, gamma is 0
+let fdRes = faceDownFilter.update(180, 0, 0, true);
+assert(Math.abs(fdRes.totalTilt) < 0.001, 'Flat face-down total tilt should be 0.0°');
+assert(Math.abs(fdRes.beta) < 0.001, 'Flat face-down beta should be 0.0°');
+console.log('✓ Face-down flat calculation correctly yields 0.0°');
+
+// When tilted 2° on beta while face down (beta = 178°)
+fdRes = faceDownFilter.update(178, 0, 0, true);
+assert(Math.abs(fdRes.totalTilt - 2.0) < 0.01, 'Face-down tilt of 2° should yield 2.0°');
+console.log('✓ Face-down tilted surface calculated accurately');
+
 console.log('ALL TESTS PASSED SUCCESSFULLY!');

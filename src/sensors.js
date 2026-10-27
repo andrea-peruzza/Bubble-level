@@ -15,8 +15,11 @@ export class SensorManager {
     this.simulatedBeta = 0;
     this.simulatedGamma = 0;
     this.simulatedAlpha = 0;
+    this.simulatedFaceDown = false;
+    this.gravityZ = null;
 
     this._handleOrientation = this._handleOrientation.bind(this);
+    this._handleMotion = this._handleMotion.bind(this);
     this._handleSimulatedPointer = this._handleSimulatedPointer.bind(this);
   }
 
@@ -70,6 +73,11 @@ export class SensorManager {
       window.addEventListener('deviceorientation', this._handleOrientation, true);
       this.isActive = true;
 
+      // Also listen to DeviceMotionEvent to accurately track gravity Z (face-down detection)
+      if (window.DeviceMotionEvent) {
+        window.addEventListener('devicemotion', this._handleMotion, true);
+      }
+
       // Fallback timeout to detect if running on desktop without accelerometers
       setTimeout(() => {
         if (!this.hasHardware) {
@@ -91,7 +99,17 @@ export class SensorManager {
   stop() {
     if (!this.isActive) return;
     window.removeEventListener('deviceorientation', this._handleOrientation, true);
+    if (window.DeviceMotionEvent) {
+      window.removeEventListener('devicemotion', this._handleMotion, true);
+    }
     this.isActive = false;
+  }
+
+  _handleMotion(event) {
+    const acc = event.accelerationIncludingGravity;
+    if (acc && typeof acc.z === 'number') {
+      this.gravityZ = acc.z;
+    }
   }
 
   _handleOrientation(event) {
@@ -107,6 +125,9 @@ export class SensorManager {
     this.hasHardware = true;
     this.isSimulating = false;
 
+    // Detect face-down: gravity Z pointing downwards (z < -4.0 m/s^2) or beta tilted past 125 degrees
+    const isFaceDown = (this.gravityZ !== null && this.gravityZ < -4.0) || Math.abs(event.beta || 0) > 125;
+
     // Coordinate normalization:
     // beta: front/back tilt [-180, 180] (positive top edge up when facing screen)
     // gamma: left/right tilt [-90, 90] (positive right edge up)
@@ -116,6 +137,7 @@ export class SensorManager {
         rawBeta: event.beta || 0,
         rawGamma: event.gamma || 0,
         rawAlpha: event.alpha || 0,
+        isFaceDown: isFaceDown,
         isSimulated: false,
         hasHardware: true
       });
@@ -125,11 +147,12 @@ export class SensorManager {
   /**
    * Allows simulating tilt via mouse/touch (for PC testing)
    */
-  setSimulatedAngles(beta, gamma, alpha = 0) {
+  setSimulatedAngles(beta, gamma, alpha = 0, isFaceDown = false) {
     this.isSimulating = true;
-    this.simulatedBeta = Math.max(-90, Math.min(90, beta));
+    this.simulatedBeta = Math.max(-180, Math.min(180, beta));
     this.simulatedGamma = Math.max(-90, Math.min(90, gamma));
     this.simulatedAlpha = alpha;
+    this.simulatedFaceDown = isFaceDown;
     this._notifyUpdate();
   }
 
@@ -139,6 +162,7 @@ export class SensorManager {
         rawBeta: this.simulatedBeta,
         rawGamma: this.simulatedGamma,
         rawAlpha: this.simulatedAlpha,
+        isFaceDown: this.simulatedFaceDown,
         isSimulated: this.isSimulating,
         hasHardware: this.hasHardware
       });

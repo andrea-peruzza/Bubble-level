@@ -27,28 +27,41 @@ export class SensorFilter {
    * @param {number} rawAlpha 
    * @returns {{ beta: number, gamma: number, alpha: number, totalTilt: number }}
    */
-  update(rawBeta, rawGamma, rawAlpha) {
+  update(rawBeta, rawGamma, rawAlpha, isFaceDown = false) {
     if (rawBeta === null || rawGamma === null) {
-      return { beta: 0, gamma: 0, alpha: 0, totalTilt: 0 };
+      return { beta: 0, gamma: 0, alpha: 0, totalTilt: 0, isFaceDown: false };
+    }
+
+    // Normalizing angles if face down:
+    // When the phone is face down flat on a surface, beta is around +/- 180°
+    // so the tilt deviation from horizontal is 180 - |beta|.
+    let effectiveBeta = rawBeta;
+    let effectiveGamma = rawGamma;
+
+    if (isFaceDown) {
+      effectiveBeta = (rawBeta > 0 ? 180 - rawBeta : -180 - rawBeta);
+      effectiveGamma = -rawGamma;
     }
 
     // Initialize with first raw readings
     if (this.filteredBeta === null) {
-      this.filteredBeta = rawBeta;
-      this.filteredGamma = rawGamma;
+      this.filteredBeta = effectiveBeta;
+      this.filteredGamma = effectiveGamma;
       this.filteredAlpha = rawAlpha || 0;
     } else {
       // Exponential Moving Average (EMA) filter
-      this.filteredBeta += this.smoothingFactor * (rawBeta - this.filteredBeta);
-      this.filteredGamma += this.smoothingFactor * (rawGamma - this.filteredGamma);
+      this.filteredBeta += this.smoothingFactor * (effectiveBeta - this.filteredBeta);
+      this.filteredGamma += this.smoothingFactor * (effectiveGamma - this.filteredGamma);
       if (rawAlpha !== null && rawAlpha !== undefined) {
         this.filteredAlpha += this.smoothingFactor * (rawAlpha - this.filteredAlpha);
       }
     }
 
-    // Apply calibration offset (Tare)
-    const calibratedBeta = this.filteredBeta - this.offsetBeta;
-    const calibratedGamma = this.filteredGamma - this.offsetGamma;
+    // Apply calibration offset (Tare).
+    // When face down, the front glass is completely flat with no camera bump,
+    // so we use the true physical horizontal reading.
+    const calibratedBeta = isFaceDown ? this.filteredBeta : (this.filteredBeta - this.offsetBeta);
+    const calibratedGamma = isFaceDown ? this.filteredGamma : (this.filteredGamma - this.offsetGamma);
 
     // Calculate total absolute tilt relative to the horizontal plane
     // Using spherical trigonometry for small/medium angles:
@@ -64,7 +77,8 @@ export class SensorFilter {
       beta: calibratedBeta,
       gamma: calibratedGamma,
       alpha: this.filteredAlpha || 0,
-      totalTilt: totalTilt
+      totalTilt: totalTilt,
+      isFaceDown: isFaceDown
     };
   }
 

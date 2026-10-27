@@ -19,6 +19,12 @@ class BubbleLevelApp {
     this.wakeLock = null;
     this.audioCtx = null;
 
+    // Face-down auto-freeze state
+    this.isFrozen = false;
+    this.frozenData = null;
+    this.faceDownStartTime = 0;
+    this.faceDownHistory = [];
+
     // DOM References
     this.dom = {
       appContainer: document.querySelector('.app-container'),
@@ -32,12 +38,15 @@ class BubbleLevelApp {
       calibrationBadge: document.getElementById('calibrationBadge'),
       iosPermissionBanner: document.getElementById('iosPermissionBanner'),
       requestPermissionBtn: document.getElementById('requestPermissionBtn'),
+      frozenBanner: document.getElementById('frozenBanner'),
+      unfreezeBtn: document.getElementById('unfreezeBtn'),
       tareBtn: document.getElementById('tareBtn'),
       resetTareBtn: document.getElementById('resetTareBtn'),
       toggleHapticsBtn: document.getElementById('toggleHapticsBtn'),
       simulationControls: document.getElementById('simulationControls'),
       simGamma: document.getElementById('simGamma'),
-      simBeta: document.getElementById('simBeta')
+      simBeta: document.getElementById('simBeta'),
+      simFaceDown: document.getElementById('simFaceDown')
     };
 
     // Latest calculated state for the render loop
@@ -150,29 +159,108 @@ class BubbleLevelApp {
     window.addEventListener('mousemove', handlePointerMove);
     window.addEventListener('mouseup', () => { isDragging = false; });
 
+    // Unfreeze button
+    if (this.dom.unfreezeBtn) {
+      this.dom.unfreezeBtn.addEventListener('click', () => {
+        this.unfreeze();
+      });
+    }
+
     // Desktop simulation sliders
     const onSliderChange = () => {
       const g = parseFloat(this.dom.simGamma.value);
       const b = parseFloat(this.dom.simBeta.value);
-      this.sensorManager.setSimulatedAngles(b, g);
+      const isDown = this.dom.simFaceDown ? this.dom.simFaceDown.checked : false;
+      this.sensorManager.setSimulatedAngles(b, g, 0, isDown);
     };
 
     this.dom.simGamma.addEventListener('input', onSliderChange);
     this.dom.simBeta.addEventListener('input', onSliderChange);
+    if (this.dom.simFaceDown) {
+      this.dom.simFaceDown.addEventListener('change', onSliderChange);
+    }
   }
 
-  onSensorUpdate({ rawBeta, rawGamma, rawAlpha, isSimulated, hasHardware }) {
-    // Apply low-pass filter and calibration offset
-    const filtered = this.filter.update(rawBeta, rawGamma, rawAlpha);
+  onSensorUpdate({ rawBeta, rawGamma, rawAlpha, isFaceDown, isSimulated, hasHardware }) {
+    if (this.isFrozen) {
+      return;
+    }
+
+    // Apply low-pass filter and calibration offset (with face-down handling)
+    const filtered = this.filter.update(rawBeta, rawGamma, rawAlpha, isFaceDown);
 
     this.currentData = {
       beta: filtered.beta,
       gamma: filtered.gamma,
       alpha: filtered.alpha,
       totalTilt: filtered.totalTilt,
+      isFaceDown: filtered.isFaceDown,
       isSimulated,
       hasHardware
     };
+
+    // Auto-freeze check when face down
+    this.checkFaceDownAutoFreeze(filtered.isFaceDown, filtered.totalTilt);
+  }
+
+  checkFaceDownAutoFreeze(isFaceDown, totalTilt) {
+    if (!isFaceDown) {
+      this.faceDownStartTime = 0;
+      this.faceDownHistory = [];
+      return;
+    }
+
+    const now = Date.now();
+    if (this.faceDownStartTime === 0) {
+      this.faceDownStartTime = now;
+      this.faceDownHistory = [];
+    }
+
+    this.faceDownHistory.push({ tilt: totalTilt, time: now });
+    this.faceDownHistory = this.faceDownHistory.filter(h => now - h.time <= 1000);
+
+    // If face down for at least 800ms and sufficiently stable
+    if (now - this.faceDownStartTime >= 800 && this.faceDownHistory.length >= 5) {
+      const tilts = this.faceDownHistory.map(h => h.tilt);
+      const maxT = Math.max(...tilts);
+      const minT = Math.min(...tilts);
+      const variance = maxT - minT;
+
+      // Phone is steady on the surface (variance <= 0.4°)
+      if (variance <= 0.4) {
+        this.freezeMeasurement();
+      }
+    }
+  }
+
+  freezeMeasurement() {
+    if (this.isFrozen) return;
+    this.isFrozen = true;
+    this.frozenData = { ...this.currentData };
+    this.faceDownStartTime = 0;
+    this.faceDownHistory = [];
+
+    // Distinctive confirmation signal: double haptic pulse + chime
+    this.triggerHaptic([200, 100, 200]);
+    this.playLevelBeep();
+
+    // Show unlock banner
+    if (this.dom.frozenBanner) {
+      this.dom.frozenBanner.classList.remove('hidden');
+    }
+    this.dom.appContainer.classList.add('is-frozen');
+  }
+
+  unfreeze() {
+    this.isFrozen = false;
+    this.frozenData = null;
+    this.faceDownStartTime = 0;
+    this.faceDownHistory = [];
+    if (this.dom.frozenBanner) {
+      this.dom.frozenBanner.classList.add('hidden');
+    }
+    this.dom.appContainer.classList.remove('is-frozen');
+    this.triggerHaptic(50);
   }
 
   renderLoop() {
@@ -181,7 +269,8 @@ class BubbleLevelApp {
   }
 
   updateUI() {
-    const { beta, gamma, totalTilt, isSimulated, hasHardware } = this.currentData;
+    const data = this.isFrozen && this.frozenData ? this.frozenData : this.currentData;
+    const { beta, gamma, totalTilt, isSimulated, hasHardware } = data;
 
     // Update hardware status badge
     if (isSimulated) {
@@ -228,16 +317,18 @@ class BubbleLevelApp {
 
     if (isLevel) {
       this.dom.appContainer.classList.add('is-level');
-      this.dom.levelStatusText.textContent = 'PERFECTLY LEVEL';
+      this.dom.levelStatusText.textContent = this.isFrozen ? 'PERFECTLY LEVEL (LOCKED)' : 'PERFECTLY LEVEL';
 
       // Haptic feedback (vibration upon entering level state)
-      if (!this.wasLevel) {
+      if (!this.wasLevel && !this.isFrozen) {
         this.triggerHaptic([150, 60, 150]);
         this.wasLevel = true;
       }
     } else {
       this.dom.appContainer.classList.remove('is-level');
-      if (totalTilt <= 1.0) {
+      if (this.isFrozen) {
+        this.dom.levelStatusText.textContent = 'MEASUREMENT LOCKED';
+      } else if (totalTilt <= 1.0) {
         this.dom.levelStatusText.textContent = 'NEARLY LEVEL';
       } else {
         this.dom.levelStatusText.textContent = 'INCLINED';
