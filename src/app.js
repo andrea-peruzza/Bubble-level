@@ -232,7 +232,7 @@ class BubbleLevelApp {
 
       // Haptic feedback (vibration upon entering level state)
       if (!this.wasLevel) {
-        this.triggerHaptic([35, 30, 45]);
+        this.triggerHaptic([150, 60, 150]);
         this.wasLevel = true;
       }
     } else {
@@ -281,21 +281,23 @@ class BubbleLevelApp {
     }
   }
 
-  triggerHaptic(pattern) {
+  triggerHaptic(pattern = 150) {
     if (!this.hapticsEnabled) return;
     const now = Date.now();
-    if (now - this.lastVibrateTime < 300) return; // Debounce to prevent constant buzzing
+    if (now - this.lastVibrateTime < 350) return; // Debounce to prevent constant buzzing
     this.lastVibrateTime = now;
 
+    let didVibrate = false;
     if ('vibrate' in navigator) {
       try {
-        navigator.vibrate(pattern);
+        didVibrate = navigator.vibrate(pattern);
       } catch (e) {
-        // Fallback if vibration fails
-        this.playLevelBeep();
+        didVibrate = false;
       }
-    } else {
-      // Fallback for iOS Safari (which lacks navigator.vibrate in WebKit)
+    }
+
+    // If vibration is not supported or was blocked by browser policy, fallback to audio chime
+    if (!didVibrate) {
       this.playLevelBeep();
     }
   }
